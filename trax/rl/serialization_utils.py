@@ -167,6 +167,55 @@ def SerializedModel(
   )
 
 
+def SerializedHalfModel(
+    seq_model,
+    observation_serializer,
+    action_serializer,
+    significance_decay,
+):
+  """Wraps a world model in serialization machinery for training.
+
+  The resulting model takes as input the observation and action sequences,
+  serializes them and interleaves into one sequence, which is fed into a given
+  autoregressive model. In contrast to SerializedModel it does not involve
+  deinterleaving.
+
+  Args:
+    seq_model: Trax autoregressive model taking as input a sequence of symbols
+      and outputting a sequence of symbol logits.
+    observation_serializer: Serializer to use for observations.
+    action_serializer: Serializer to use for actions.
+    significance_decay: Float from (0, 1) for exponential weighting of symbols
+      in the representation.
+
+  Returns:
+    A model of signature
+    (obs, act, obs, mask) -> (obs_logits, obs_repr, weights), where obs are
+    observations (the second occurrence is the target), act are actions, mask is
+    the observation mask, obs_logits are logits of the output observation
+    representation, obs_repr is the target observation representation and
+    weights are the target weights.
+  """
+  weigh_by_significance = [
+      # (mask,)
+      RepresentationMask(serializer=observation_serializer),
+      # (repr_mask)
+      SignificanceWeights(serializer=observation_serializer,
+                          decay=significance_decay),
+      # (mask, sig_weights)
+  ]
+  return tl.Serial(
+      # (obs, act, obs, mask)
+      tl.Parallel(Serialize(serializer=observation_serializer),
+                  Serialize(serializer=action_serializer),
+                  weigh_by_significance),
+      # (obs_repr, act_repr, obs_repr, mask)
+      Interleave(),
+      # (obs_act_repr, obs_repr, mask)
+      seq_model,
+  )
+
+
 # TODO(pkozakowski): Figure out a more generic way to do this (submodel tags
 # inside the model?).
 def extract_inner_model(serialized_model):  # pylint: disable=invalid-name
