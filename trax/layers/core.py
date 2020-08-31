@@ -269,6 +269,51 @@ class Weights(base.Layer):
     self.weights = self._initializer(self._shape, self.rng)
 
 
+class SummaryScalar(base.Layer):
+  """A layer receiving a tensor, and adding it to TensorBoard as a scalar.
+
+  It takes an input and returns no values. It stores this input as a state to be
+  used as a metric in TensorBoard.
+  It converts a tensor to a scalar my taking a mean value.
+  """
+
+  def __init__(self, name):
+    """Takes a tensor, returns nothing.
+
+    Args:
+      name: Name of the metric to be reported.
+    """
+    name = 'metric_' + name
+    super().__init__(name=f'Summary_{name}', n_in=1, n_out=0)
+    self._name = name
+
+  def forward(self, x):
+    """Executes this layer as part of a forward pass through the model.
+
+    Args:
+      x: Tensor of same shape and dtype as the input signature used to
+          initialize this layer.
+
+    Returns:
+      Tensor with previously specified shape and dtype.
+    """
+    self.state = {self._name: jnp.mean(x, None, keepdims=False)}
+    return ()
+
+  def init_weights_and_state(self, input_signature):
+    """Returns newly initialized weights for this layer.
+
+    Weights is a single  `w` tensor with previously specified shape.
+
+    Args:
+      input_signature: `ShapeDtype` instance characterizing the input this layer
+          should compute on. Unused.
+    """
+    del input_signature  # Unused.
+    self.weights = ()
+    self.state = {self._name: jnp.array(0.)}
+
+
 class RandomUniform(base.Layer):
   """Layer returning a tensor with random values distributed uniformly."""
 
